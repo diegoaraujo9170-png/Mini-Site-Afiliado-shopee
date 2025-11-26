@@ -1,0 +1,1125 @@
+import React, { useState, useEffect, useCallback } from 'react';
+import { 
+    Settings, ArrowLeft, Save, Link, ShoppingBag, Heart, Briefcase, Footprints, Sparkles, Leaf, Gem, Home, 
+    Utensils, Zap, Monitor, Image, Target, LineChart, Trash2, Palette, Users, Instagram, Facebook, 
+    Youtube, Music, Mail, MessageSquare, ToggleLeft, ToggleRight, X, Share2 // Pinterest foi substituído por Share2
+} from 'lucide-react';
+
+// --- Constantes de Storage e Cores Padrão ---
+const TRACKING_STORAGE_KEY = 'affiliateTrackingIds';
+const LINKS_STORAGE_KEY = 'affiliateLinks';
+const COLOR_PALETTE_KEY = 'affiliateColorPalette';
+const SOCIAL_LINKS_KEY = 'affiliateSocialLinks'; 
+
+const DEFAULT_PALETTE = {
+    PRIMARY_INTENSE: '#C53667', // Rosa Cereja Intenso (Principal)
+    SECONDARY_DEEP: '#6C3483',  // Púrpura Noite (Secundário/Headers)
+    BACKGROUND_SOFT: '#F4F4F4', // Off-White Elegante (Fundo Geral)
+    TEXT_DARK: '#2A2A2A',       // Grafite Profundo
+    ACCENT_LIGHT: '#F9D6E1',    // Rosa Pastel Escuro
+    SUCCESS_GREEN: '#2ECC71',
+    ORANGE_SHOPEE: '#FFB399',   // Laranja Pêssego/Coral Suave (Fundo dos links)
+    CTA_BRIGHT_GREEN: '#349893', // Verde Petróleo/Teal Escuro (CTA)
+    WHITE: '#FFFFFF'
+};
+
+const defaultTrackingIds = {
+    meta: '',    // Meta Pixel ID (Facebook/Instagram)
+    google: '',  // Google Tag ID (GA4/Google Ads)
+    tiktok: '',  // TikTok Pixel ID
+};
+
+const defaultSocialLinks = [
+    { key: 'instagram', name: 'Instagram', iconName: 'Instagram', placeholder: 'https://instagram.com/seuusuario', link: '', visible: true },
+    { key: 'tiktok', name: 'TikTok', iconName: 'Music', placeholder: 'https://tiktok.com/@seuusuario', link: '', visible: true },
+    { key: 'whatsapp', name: 'WhatsApp', iconName: 'MessageSquare', placeholder: 'Ex: 5511987654321', link: '', visible: true },
+    { key: 'pinterest', name: 'Pinterest', iconName: 'Share2', placeholder: 'https://pinterest.com/seuusuario', link: '', visible: false }, // Ícone atualizado para Share2
+    { key: 'x', name: 'X (Twitter)', iconName: 'X', placeholder: 'https://x.com/seuusuario', link: '', visible: false },
+    { key: 'facebook', name: 'Facebook', iconName: 'Facebook', placeholder: 'https://facebook.com/suapagina', link: '', visible: false },
+    { key: 'youtube', name: 'YouTube', iconName: 'Youtube', placeholder: 'https://youtube.com/seucanal', link: '', visible: false },
+    { key: 'email', name: 'Email', iconName: 'Mail', placeholder: 'mailto:seu@email.com.br', link: '', visible: false },
+];
+
+const defaultCategories = [
+    { title: "Kit Moda Feminina", base64Image: null, iconName: "ShoppingBag", link: "https://shopee.com.br/moda-feminina" },
+    { title: "Kit Acessórios de Moda", base64Image: null, iconName: "Gem", link: "https://shopee.com.br/acessorios-moda" },
+    { title: "Kit Bolsas", base64Image: null, iconName: "Briefcase", link: "https://shopee.com.br/bolsas" },
+    { title: "Kit Sapatos", base64Image: null, iconName: "Footprints", link: "https://shopee.com.br/sapatos" },
+    { title: "Kit Maquiagem", base64Image: null, iconName: "Sparkles", link: "https://shopee.com.br/maquiagem" },
+    { title: "Kit Skincare", base64Image: null, iconName: "Leaf", link: "https://shopee.com.br/skincare" },
+    { title: "Kit Cabelo", base64Image: null, iconName: "Heart", link: "https://shopee.com.br/cabelo" },
+    { title: "Kit Jóias", base64Image: null, iconName: "Gem", link: "https://shopee.com.br/joias" },
+    { title: "Kit Lingerie", base64Image: null, iconName: "Heart", link: "https://shopee.com.br/lingerie" }, 
+    { title: "Kit Fitness", base64Image: null, iconName: "Zap", link: "https://shopee.com.br/fitness" },
+    { title: "Kit Mãe e Bebê", base64Image: null, iconName: "Home", link: "https://shopee.com.br/mae-bebe" },
+    { title: "Kit Casa & Cozinha", base64Image: null, iconName: "Utensils", link: "https://shopee.com.br/casa-cozinha" },
+    { title: "Kit Áudio", base64Image: null, iconName: "Monitor", link: "https://shopee.com.br/audio" },
+    { title: "Kit Perfumes", base64Image: null, iconName: "Image", link: "https://shopee.com.br/perfumes" },
+    { title: "Kit Papelaria", base64Image: null, iconName: "Briefcase", link: "https://shopee.com.br/papelaria" },
+    { title: "Kit Plus Size", base64Image: null, iconName: "ShoppingBag", link: "https://shopee.com.br/plus-size" },
+];
+
+// --- Mapeamento de Ícones ---
+const IconComponents = {
+  ShoppingBag, Heart, Briefcase, Footprints, Sparkles, Leaf, Gem, Home, Utensils, Zap, Monitor, Image, Target, LineChart,
+  Instagram, Facebook, Youtube, Music, Mail, MessageSquare, Share2, X // Pinterest foi substituído por Share2
+};
+
+// Função para gerar URLs de imagem placeholder (usado quando não há imagem Base64)
+const getPlaceholderImage = (title, palette) => {
+    const text = title.split(' ')[0] || "LINK";
+    const colors = [
+        { bg: palette.ACCENT_LIGHT.substring(1), text: palette.PRIMARY_INTENSE.substring(1) }, 
+        { bg: palette.SECONDARY_DEEP.substring(1), text: palette.BACKGROUND_SOFT.substring(1) },
+    ];
+    const color = colors[Math.floor(Math.random() * colors.length)];
+    return `https://placehold.co/300x200/${color.bg}/${color.text}?text=${encodeURIComponent(text.toUpperCase())}`;
+};
+
+// --- Componentes de UI Simples ---
+
+const Button = ({ children, onClick, className = "", variant = "default", disabled = false, palette }) => {
+    let baseStyle = "px-4 py-2 font-semibold rounded-lg transition-colors duration-200 shadow-md flex items-center justify-center text-sm";
+    
+    // As classes de cor são construídas dinamicamente usando a prop 'palette'
+    const PRIMARY = palette.PRIMARY_INTENSE;
+    const SECONDARY = palette.SECONDARY_DEEP;
+    const ACCENT = palette.ACCENT_LIGHT;
+
+    switch (variant) {
+        case "outline": // Botão Secundário de Admin
+            baseStyle += ` bg-${palette.WHITE} border border-[${PRIMARY}] text-[${PRIMARY}] hover:bg-[${ACCENT}]`;
+            break;
+        case "success": // Botão Salvar (Verde)
+            baseStyle += ` bg-[${palette.SUCCESS_GREEN}] text-white hover:bg-[#27AE60]`;
+            break;
+        case "secondary": // Botão Voltar (cinza suave)
+            baseStyle += " bg-gray-300 text-gray-800 hover:bg-gray-400";
+            break;
+        case "danger":
+            baseStyle += " bg-red-500 text-white hover:bg-red-600";
+            break;
+        case "cta_shopee": // Botão de Ação Principal (Verde Petróleo/Teal Escuro)
+            baseStyle += ` bg-[${palette.CTA_BRIGHT_GREEN}] text-white hover:bg-[#2A7D78] font-bold`;
+            break;
+        case "link": // Link do Footer
+            baseStyle = `bg-transparent text-[${PRIMARY}] hover:text-opacity-80 p-0 text-sm font-semibold h-auto`;
+            break;
+        case "social": // Botão de Redes Sociais
+            baseStyle = `bg-[${SECONDARY}] text-white hover:bg-opacity-80 p-2 rounded-full h-10 w-10 shadow-lg`;
+            break;
+        default: // default (Rosa Cereja Intenso)
+            baseStyle += ` bg-[${PRIMARY}] text-white hover:bg-opacity-80`;
+            break;
+    }
+    
+    if (disabled) {
+        baseStyle += " opacity-60 cursor-not-allowed";
+    }
+    
+    return (
+        <button className={`${baseStyle} ${className}`} onClick={onClick} disabled={disabled}>
+            {children}
+        </button>
+    ); 
+};
+
+/**
+ * Componente CategoryCard
+ */
+const CategoryCard = ({ title, iconName, link, base64Image, palette }) => {
+    const IconComponent = IconComponents[iconName] || ShoppingBag;
+    
+    const handleClick = useCallback((e) => {
+        e.preventDefault();
+        window.open(link, '_blank');
+    }, [link]);
+
+    const imageSrc = base64Image && base64Image.startsWith('data:image') 
+        ? base64Image 
+        : getPlaceholderImage(title, palette);
+
+    return (
+        <div 
+            className={`bg-${palette.WHITE} rounded-xl shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-[1.02] cursor-pointer overflow-hidden border-2 group`}
+            style={{ borderColor: palette.ACCENT_LIGHT }} // Rosa Pastel Escuro na borda
+            onClick={handleClick}
+        >
+            <div className="relative h-32 w-full">
+                <img 
+                    src={imageSrc} 
+                    alt={`Imagem de ${title}`} 
+                    className="w-full h-full object-cover"
+                    onError={(e) => { e.currentTarget.style.backgroundColor = palette.ACCENT_LIGHT; e.currentTarget.src = '';}} 
+                />
+                <div className="absolute inset-0 bg-black bg-opacity-20 group-hover:bg-opacity-30 transition-opacity flex items-center justify-center">
+                    <IconComponent className="w-8 h-8 text-white opacity-90" />
+                </div>
+            </div>
+            <div className="p-3 text-center">
+                <h3 className="text-md font-bold mb-2 truncate" style={{ color: palette.TEXT_DARK }}>{title}</h3> {/* Grafite Profundo */}
+                <Button 
+                    variant="cta_shopee" 
+                    className="w-full h-8 text-xs"
+                    palette={palette}
+                >
+                    Ver Na Shopee
+                </Button>
+            </div>
+        </div>
+    );
+};
+
+const Header = ({ palette }) => (
+    <header className={`bg-${palette.WHITE} shadow-xl sticky top-0 z-10`}>
+      <div className="container mx-auto px-4 py-4">
+        {/* Título: Achadinhokit.com */}
+        <h1 className="text-3xl font-black" style={{ color: palette.PRIMARY_INTENSE }}>Achadinhokit.com</h1> {/* Rosa Cereja Intenso */}
+      </div>
+    </header>
+);
+
+// --- Componente SocialBar ---
+const SocialBar = ({ socialLinks, palette }) => {
+    const visibleLinks = socialLinks.filter(l => l.visible && l.link);
+
+    if (visibleLinks.length === 0) return null;
+
+    const getLinkHref = (link) => {
+        if (link.key === 'whatsapp') {
+            // Remove caracteres não numéricos e forma o link
+            const phoneNumber = link.link.replace(/\D/g, '');
+            return `https://wa.me/${phoneNumber}`;
+        }
+        if (link.key === 'email') {
+            // Garante que 'mailto:' está presente se for apenas o email
+            return link.link.startsWith('mailto:') ? link.link : `mailto:${link.link}`;
+        }
+        // Para todas as outras plataformas, usa o link fornecido
+        return link.link.startsWith('http') ? link.link : `https://${link.link}`;
+    }
+
+    return (
+        <div 
+            className="flex justify-center gap-4 py-4 px-4 rounded-xl shadow-inner mb-6 flex-wrap"
+            style={{ 
+                backgroundColor: palette.ACCENT_LIGHT, // Rosa Pastel Escuro como fundo
+                border: `1px solid ${palette.PRIMARY_INTENSE}40` 
+            }}
+        >
+            <h2 className="text-lg font-bold flex items-center min-w-[120px]" style={{ color: palette.TEXT_DARK }}>
+                <Users className="w-5 h-5 mr-2" style={{ color: palette.PRIMARY_INTENSE }} />
+                Siga-nos:
+            </h2>
+            <div className="flex gap-3 flex-wrap justify-center">
+                {visibleLinks.map((linkData) => {
+                    const IconComponent = IconComponents[linkData.iconName] || Link;
+                    const href = getLinkHref(linkData);
+
+                    return (
+                        <a 
+                            key={linkData.key}
+                            href={href}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="transition-transform duration-200 hover:scale-110"
+                        >
+                            <Button variant="social" palette={palette} title={`Ir para ${linkData.name}`}>
+                                <IconComponent className="w-5 h-5" />
+                            </Button>
+                        </a>
+                    );
+                })}
+            </div>
+        </div>
+    );
+};
+
+// --- FUNÇÃO DE INJEÇÃO DE SCRIPTS DE RASTREAMENTO ---
+const injectTrackingScripts = (ids) => {
+    document.querySelectorAll('[data-tracking-script]').forEach(script => script.remove());
+    const head = document.head;
+
+    if (ids.meta) {
+        const script = document.createElement('script');
+        script.setAttribute('data-tracking-script', 'meta');
+        script.innerHTML = `
+            !function(f,b,e,v,n,t,s)
+            {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+            n.callMethod.apply(n,arguments):n.queue.push(arguments)};
+            if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
+            n.queue=[];t=b.createElement(e);t.async=!0;
+            t.src=v;s=b.getElementsByTagName(e)[0];
+            s.parentNode.insertBefore(t,s)}(window, document,'script',
+            'https://connect.facebook.net/en_US/fbevents.js');
+            fbq('init', '${ids.meta}');
+            fbq('track', 'PageView');
+        `;
+        head.appendChild(script);
+
+        const noscript = document.createElement('noscript');
+        noscript.setAttribute('data-tracking-script', 'meta-noscript');
+        noscript.innerHTML = `<img height="1" width="1" style="display:none"
+            src="https://www.facebook.com/tr?id=${ids.meta}&ev=PageView&noscript=1"
+        />`;
+        head.appendChild(noscript);
+    }
+
+    if (ids.google) {
+        const script = document.createElement('script');
+        script.setAttribute('data-tracking-script', 'google');
+        script.async = true;
+        script.src = `https://www.googletagmanager.com/gtag/js?id=${ids.google}`;
+        head.appendChild(script);
+
+        const scriptInit = document.createElement('script');
+        scriptInit.setAttribute('data-tracking-script', 'google-init');
+        scriptInit.innerHTML = `
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){dataLayer.push(arguments);}
+            gtag('js', new Date());
+            gtag('config', '${ids.google}');
+        `;
+        head.appendChild(scriptInit);
+    }
+
+    if (ids.tiktok) {
+        const script = document.createElement('script');
+        script.setAttribute('data-tracking-script', 'tiktok');
+        script.innerHTML = `
+            !function (w, d, t) {
+              w.TiktokAnalyticsObject=t;var ttq=w[t]=w[t]||[];ttq.methods.forEach(function(item){ttq[item]=function(){ttq.push({method:item,arguments:Array.prototype.slice.call(arguments)});};});
+              ttq.setAndDefer=function(item,args){item in ttq.methods ? ttq[item].apply(null, args) : ttq.push({item:item,args:args});};
+              ttq.methods.push('page', 'track', 'debug', 'identify', 'on', 'off', 'wait', 'event', 'ecommerce', 'addToCart', 'addToWishlist', 'checkout', 'completePayment', 'itemView', 'search', 'subscribe', 'contact', 'download', 'submitForm');
+              ttq.load('${ids.tiktok}');
+              ttq.page();
+            }(window, document, 'ttq');
+        `;
+        head.appendChild(script);
+    }
+};
+
+// --- 1. Tela Principal (Index) ---
+
+const Index = ({ categories, setView, palette, socialLinks }) => {
+    return (
+        <div className="min-h-screen font-sans" style={{ backgroundColor: palette.BACKGROUND_SOFT }}> {/* Off-White Elegante (Fundo Geral) */}
+            <Header palette={palette} />
+            
+            <div className="container mx-auto px-4 py-4 flex flex-col sm:flex-row justify-end gap-3">
+                <Button 
+                    onClick={() => setView('social')} 
+                    variant="default" 
+                    className={`gap-2`}
+                    style={{ backgroundColor: palette.SECONDARY_DEEP, hover: '#57276B' }}
+                    palette={palette}
+                >
+                    <Users className="h-4 w-4" />
+                    🔗 Redes Sociais
+                </Button>
+                <Button 
+                    onClick={() => setView('color')}
+                    variant="default" 
+                    className={`gap-2`}
+                    style={{ backgroundColor: palette.SECONDARY_DEEP, hover: '#57276B' }}
+                    palette={palette}
+                >
+                    <Palette className="h-4 w-4" />
+                    🎨 Personalizar Cores
+                </Button>
+                <Button 
+                    onClick={() => setView('tracking')}
+                    variant="default" 
+                    className={`gap-2 bg-[${palette.SECONDARY_DEEP}] hover:bg-[#57276B]`} 
+                    palette={palette}
+                >
+                    <Target className="h-4 w-4" />
+                    Configurar Pixels/Tags
+                </Button>
+                <Button 
+                    onClick={() => setView('admin')}
+                    variant="outline" 
+                    className="gap-2"
+                    palette={palette}
+                >
+                    <Settings className="h-4 w-4" />
+                    Configurar Links & Imagens
+                </Button>
+            </div>
+            
+            <main className="container mx-auto px-4 py-4">
+                {/* BARRA DE LINKS SOCIAIS AQUI */}
+                <SocialBar socialLinks={socialLinks} palette={palette} /> 
+            </main>
+
+            {/* Wrapper de fundo Laranja Pêssego/Coral Suave */}
+            <div style={{ backgroundColor: palette.ORANGE_SHOPEE }}>
+                <main className="container mx-auto px-4 py-8">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 sm:gap-6">
+                        {categories.map((category, index) => (
+                            <div
+                                key={category.title}
+                                style={{ animationDelay: `${index * 0.05}s` }}
+                            >
+                                <CategoryCard {...category} palette={palette} />
+                            </div>
+                        ))}
+                    </div>
+                </main>
+            </div>
+
+            <footer className={`bg-${palette.WHITE} mt-0 py-6 px-4 border-t border-gray-200`}>
+                <div className="container mx-auto text-center text-gray-500 text-sm">
+                    {/* Botão Política de Privacidade */}
+                    <Button 
+                        onClick={() => setView('privacy')}
+                        variant="link" 
+                        className={`text-xs font-semibold p-0 h-auto`}
+                        palette={palette}
+                    >
+                        Política de Privacidade
+                    </Button>
+                </div>
+            </footer>
+        </div>
+    );
+};
+
+// --- 2. Tela de Administração de Links (Admin) ---
+
+const Admin = ({ categories, setCategories, setView, palette }) => {
+    const [tempCategories, setTempCategories] = useState(categories);
+    
+    useEffect(() => {
+      setTempCategories(categories);
+    }, [categories]);
+
+    const handleChange = (index, field, value) => {
+        setTempCategories(prev => 
+            prev.map((c, i) => i === index ? { ...c, [field]: value } : c)
+        );
+    };
+    
+    const handleImageUpload = (index, file) => {
+        if (file) {
+            if (file.size > 1024 * 1024) {
+                 console.error("A imagem é muito grande! Tamanho máximo de 1MB."); 
+                 return;
+            }
+
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                if (reader.result && typeof reader.result === 'string') {
+                    handleChange(index, 'base64Image', reader.result);
+                }
+            };
+            reader.readAsDataURL(file);
+        }
+    };
+
+    const handleSave = () => {
+        const dataToSave = tempCategories.map(({ title, link, iconName, base64Image }) => ({
+            title,
+            link,
+            iconName,
+            base64Image
+        }));
+        
+        setCategories(tempCategories); 
+        
+        localStorage.setItem(LINKS_STORAGE_KEY, JSON.stringify(dataToSave));
+        
+        console.log('Links e Imagens de Afiliado Salvos com Sucesso!');
+        setView('index');
+    };
+
+
+    return (
+        <main className="min-h-screen p-4 sm:p-8 font-sans" style={{ backgroundColor: palette.BACKGROUND_SOFT }}> {/* Off-White Elegante */}
+            <div className={`max-w-4xl mx-auto bg-${palette.WHITE} p-6 sm:p-8 rounded-xl shadow-2xl border-t-4`} style={{ borderColor: palette.PRIMARY_INTENSE }}> {/* Rosa Cereja Intenso */}
+                <div className="flex justify-between items-center mb-6 pb-4 border-b">
+                    <h2 className="text-3xl font-bold" style={{ color: palette.PRIMARY_INTENSE }}>Editar Links & Imagens de Categoria</h2> {/* Rosa Cereja Intenso */}
+                    <Button 
+                        onClick={() => setView('index')}
+                        variant="secondary"
+                        className="gap-2"
+                        palette={palette}
+                    >
+                        <ArrowLeft className="h-5 w-5" />
+                        Voltar
+                    </Button>
+                </div>
+
+                <p className="mb-6 text-gray-600">Altere o link de afiliado e carregue a imagem para cada categoria. Clique em "SALVAR" ao terminar.</p>
+
+                <div className="space-y-6">
+                    {tempCategories.map((item, index) => {
+                        const IconComponent = IconComponents[item.iconName] || Link; 
+
+                        return (
+                            <div key={index} className="p-4 border border-gray-200 rounded-lg bg-gray-50 shadow-sm">
+                                <div className="flex items-center gap-3 mb-4">
+                                    <IconComponent className="w-5 h-5" style={{ color: palette.PRIMARY_INTENSE }} /> {/* Rosa Cereja Intenso */}
+                                    <h3 className="text-lg font-bold text-gray-800" style={{ color: palette.TEXT_DARK }}>{item.title}</h3> {/* Grafite Profundo */}
+                                </div>
+                                
+                                {/* Campo de Upload de Imagem */}
+                                <div className="mb-4 p-3 bg-white rounded-lg border border-dashed border-gray-300">
+                                    <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
+                                        <Image className="w-4 h-4 text-gray-500" />
+                                        Imagem do Produto:
+                                    </label>
+
+                                    <input
+                                        type="file"
+                                        id={`file-upload-${index}`}
+                                        accept="image/png, image/jpeg, image/webp"
+                                        style={{ display: 'none' }}
+                                        onChange={(e) => handleImageUpload(index, e.target.files[0])}
+                                    />
+                                    
+                                    <div className="flex items-center gap-4">
+                                        <Button 
+                                            onClick={() => document.getElementById(`file-upload-${index}`).click()}
+                                            className="gap-2"
+                                            palette={palette}
+                                        >
+                                            <Image className="h-4 w-4" />
+                                            {item.base64Image && item.base64Image.startsWith('data:image') ? 'Trocar Foto' : 'Escolher Foto'}
+                                        </Button>
+                                        
+                                        {/* Visualização da Imagem Atual (Base64 ou Placeholder) */}
+                                        {item.base64Image && (
+                                            <div className="h-12 w-12 rounded-lg overflow-hidden border-2 relative group" style={{ borderColor: palette.PRIMARY_INTENSE }} > {/* Rosa Cereja Intenso */}
+                                                <img 
+                                                    src={item.base64Image.startsWith('data:image') ? item.base64Image : getPlaceholderImage(item.title, palette)} 
+                                                    alt={`Prévia ${item.title}`} 
+                                                    className="w-full h-full object-cover" 
+                                                />
+                                                
+                                                {/* Botão para Remover Imagem */}
+                                                {item.base64Image.startsWith('data:image') && (
+                                                    <button 
+                                                        onClick={() => handleChange(index, 'base64Image', '')}
+                                                        className="absolute inset-0 bg-red-600 bg-opacity-70 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity rounded-lg"
+                                                        title="Remover Imagem"
+                                                    >
+                                                        <Trash2 className="w-4 h-4"/>
+                                                    </button>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                    <p className="text-xs text-gray-500 mt-2">
+                                        Formato: PNG, JPG ou WEBP. Máx. 1MB. (A imagem será salva no seu navegador).
+                                    </p>
+                                </div>
+
+                                {/* Edição do Link */}
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1">
+                                        <Link className="w-4 h-4 text-gray-500" />
+                                        URL de Afiliado:
+                                    </label>
+                                    <input
+                                        type="url"
+                                        value={item.link}
+                                        onChange={(e) => handleChange(index, 'link', e.target.value)}
+                                        className={`w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-[${palette.PRIMARY_INTENSE}] focus:border-[${palette.PRIMARY_INTENSE}]`} // Rosa Cereja Intenso no foco
+                                        placeholder="https://seu-link-de-afiliado.com.br"
+                                    />
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+                
+                <div className="mt-8 flex justify-end">
+                    <Button 
+                        onClick={handleSave} 
+                        variant="success" 
+                        className="gap-2 px-8 py-3 text-lg"
+                        palette={palette}
+                    >
+                        <Save className="h-5 w-5" />
+                        SALVAR LINKS E IMAGENS
+                    </Button>
+                </div>
+            </div>
+        </main>
+    );
+};
+
+// --- 3. Tela de Configuração de Cores (ColorConfig) ---
+
+const ColorConfig = ({ palette, setPalette, setView }) => {
+    const [tempPalette, setTempPalette] = useState(palette);
+
+    const editableColors = [
+        { key: 'PRIMARY_INTENSE', label: 'Cor Principal (Botões/Títulos)', desc: 'Rosa Cereja Intenso' },
+        { key: 'SECONDARY_DEEP', label: 'Cor Secundária (Headers/Bordas)', desc: 'Púrpura Noite' },
+        { key: 'ORANGE_SHOPEE', label: 'Cor de Fundo da Seção de Links', desc: 'Laranja Pêssego Suave' },
+        { key: 'CTA_BRIGHT_GREEN', label: 'Cor do Botão "Ver na Shopee"', desc: 'Verde Petróleo/Teal Escuro' },
+        { key: 'BACKGROUND_SOFT', label: 'Cor de Fundo Geral', desc: 'Off-White Elegante' },
+        { key: 'TEXT_DARK', label: 'Cor do Texto Principal', desc: 'Grafite Profundo' },
+    ];
+
+    const handleChange = (key, value) => {
+        // Garantir que o valor seja um código hexadecimal válido (opcionalmente precedido por #)
+        const cleanedValue = value.toUpperCase().startsWith('#') ? value.toUpperCase() : `#${value.toUpperCase()}`;
+        if (/^#([0-9A-F]{3}){1,2}$/i.test(cleanedValue)) {
+            setTempPalette(prev => ({ ...prev, [key]: cleanedValue }));
+        }
+    };
+
+    const handleSave = () => {
+        setPalette(tempPalette);
+        localStorage.setItem(COLOR_PALETTE_KEY, JSON.stringify(tempPalette));
+        console.log('Cores Personalizadas Salvas com Sucesso!');
+        setView('index');
+    };
+
+    const handleReset = () => {
+        setTempPalette(DEFAULT_PALETTE);
+        console.log('Cores restauradas para o padrão. Clique em Salvar para confirmar.');
+    };
+
+    return (
+        <main className="min-h-screen p-4 sm:p-8 font-sans" style={{ backgroundColor: palette.BACKGROUND_SOFT }}>
+            <div className={`max-w-4xl mx-auto bg-${palette.WHITE} p-6 sm:p-8 rounded-xl shadow-2xl border-t-4`} style={{ borderColor: palette.PRIMARY_INTENSE }}>
+                <div className="flex justify-between items-center mb-6 pb-4 border-b">
+                    <h2 className="text-3xl font-bold" style={{ color: palette.PRIMARY_INTENSE }}>🎨 Personalizar Cores do Mini-Site</h2>
+                    <Button 
+                        onClick={() => setView('index')}
+                        variant="secondary"
+                        className="gap-2"
+                        palette={palette}
+                    >
+                        <ArrowLeft className="h-5 w-5" />
+                        Voltar
+                    </Button>
+                </div>
+
+                <p className="mb-6 text-gray-600">Altere os códigos hexadecimais para adaptar a loja à sua marca. **As alterações são aplicadas instantaneamente abaixo.**</p>
+
+                <div className="space-y-6">
+                    {editableColors.map(({ key, label, desc }) => (
+                        <div key={key} className="p-4 border border-gray-200 rounded-lg bg-gray-50 shadow-sm">
+                            <div className="flex items-center justify-between mb-3">
+                                <h3 className="text-lg font-bold text-gray-800" style={{ color: tempPalette.TEXT_DARK }}>{label}</h3>
+                                <div className="w-8 h-8 rounded-full border-2 shadow" style={{ backgroundColor: tempPalette[key], borderColor: tempPalette.TEXT_DARK }}></div>
+                            </div>
+                            
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Código Hexadecimal:
+                                </label>
+                                <input
+                                    type="text"
+                                    value={tempPalette[key].replace('#', '')}
+                                    onChange={(e) => handleChange(key, e.target.value)}
+                                    className={`w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-[${tempPalette.PRIMARY_INTENSE}] focus:border-[${tempPalette.PRIMARY_INTENSE}] font-mono uppercase tracking-widest`}
+                                    placeholder="RRGGBB"
+                                    maxLength={6}
+                                    style={{ color: tempPalette.TEXT_DARK }}
+                                />
+                                <p className="text-xs text-gray-500 mt-1">
+                                    Padrão: {DEFAULT_PALETTE[key]} ({desc})
+                                </p>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+                
+                <div className="mt-8 flex justify-between">
+                    <Button 
+                        onClick={handleReset} 
+                        variant="danger" 
+                        className="gap-2 px-6 py-3"
+                        palette={palette}
+                    >
+                        <Trash2 className="h-5 w-5" />
+                        Restaurar Padrão
+                    </Button>
+                    <Button 
+                        onClick={handleSave} 
+                        variant="success" 
+                        className="gap-2 px-8 py-3 text-lg"
+                        palette={palette}
+                    >
+                        <Save className="h-5 w-5" />
+                        SALVAR CORES
+                    </Button>
+                </div>
+            </div>
+        </main>
+    );
+};
+
+// --- 4. Tela de Configuração de Rastreamento (TrackingConfig) ---
+
+const TrackingConfig = ({ trackingIds, setTrackingIds, setView, palette }) => {
+    const [tempIds, setTempIds] = useState(trackingIds);
+    
+    useEffect(() => {
+        setTempIds(trackingIds);
+    }, [trackingIds]);
+
+    const handleChange = (platform, value) => {
+        setTempIds(prev => ({ ...prev, [platform]: value.trim() }));
+    };
+
+    const handleSave = () => {
+        setTrackingIds(tempIds);
+        localStorage.setItem(TRACKING_STORAGE_KEY, JSON.stringify(tempIds));
+        console.log('IDs de Rastreamento Salvos com Sucesso! Os Pixels/Tags foram atualizados.');
+        setView('index');
+    };
+
+    const platforms = [
+        { key: 'meta', name: 'Meta Pixel (Facebook/Instagram)', icon: Heart, placeholder: 'Ex: 1234567890' },
+        { key: 'google', name: 'Google Tag (GA4/Ads)', icon: LineChart, placeholder: 'Ex: G-XXXXXXXXXX ou AW-XXXXXXXXX' },
+        { key: 'tiktok', name: 'TikTok Pixel', icon: Target, placeholder: 'Ex: CXXXXXXXXXX' },
+    ];
+
+    return (
+        <main className="min-h-screen p-4 sm:p-8 font-sans" style={{ backgroundColor: palette.BACKGROUND_SOFT }}>
+            <div className={`max-w-4xl mx-auto bg-${palette.WHITE} p-6 sm:p-8 rounded-xl shadow-2xl border-t-4`} style={{ borderColor: palette.SECONDARY_DEEP }}>
+                <div className="flex justify-between items-center mb-6 pb-4 border-b">
+                    <h2 className="text-3xl font-bold text-gray-800" style={{ color: palette.SECONDARY_DEEP }}>Configuração de Rastreamento (Pixels/Tags)</h2>
+                    <Button 
+                        onClick={() => setView('index')}
+                        variant="secondary"
+                        className="gap-2"
+                        palette={palette}
+                    >
+                        <ArrowLeft className="h-5 w-5" />
+                        Voltar
+                    </Button>
+                </div>
+
+                <p className="mb-6 text-gray-600">Insira apenas o ID de rastreamento de cada plataforma. Os scripts serão injetados automaticamente.</p>
+
+                <div className="space-y-6">
+                    {platforms.map(platform => {
+                        const Icon = platform.icon;
+                        return (
+                            <div key={platform.key} className="p-4 border border-gray-200 rounded-lg bg-gray-50 shadow-sm">
+                                <div className="flex items-center gap-3 mb-3" style={{ color: palette.SECONDARY_DEEP }}>
+                                    <Icon className="w-5 h-5" />
+                                    <h3 className="text-lg font-bold text-gray-800" style={{ color: palette.TEXT_DARK }}>{platform.name}</h3>
+                                </div>
+                                
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                        ID de Rastreamento ({platform.key.toUpperCase()}):
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={tempIds[platform.key]}
+                                        onChange={(e) => handleChange(platform.key, e.target.value)}
+                                        className={`w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-[${palette.SECONDARY_DEEP}] focus:border-[${palette.SECONDARY_DEEP}]`}
+                                        placeholder={platform.placeholder}
+                                    />
+                                    <p className="text-xs text-gray-500 mt-1">
+                                        Deixe vazio para desativar o rastreamento desta plataforma.
+                                    </p>
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+                
+                <div className="mt-8 flex justify-end">
+                    <Button 
+                        onClick={handleSave} 
+                        variant="success" 
+                        className="gap-2 px-8 py-3 text-lg"
+                        palette={palette}
+                    >
+                        <Save className="h-5 w-5" />
+                        SALVAR PIXELS
+                    </Button>
+                </div>
+            </div>
+        </main>
+    );
+};
+
+// --- 5. Tela de Configuração de Redes Sociais (SocialConfig) ---
+
+const SocialConfig = ({ socialLinks, setSocialLinks, setView, palette }) => {
+    const [tempLinks, setTempLinks] = useState(socialLinks);
+
+    const handleChange = (key, field, value) => {
+        setTempLinks(prev => 
+            prev.map(l => l.key === key ? { ...l, [field]: value } : l)
+        );
+    };
+
+    const handleSave = () => {
+        // Limpar links vazios para não aparecerem
+        const cleanedLinks = tempLinks.map(link => ({
+            ...link,
+            link: link.link ? link.link.trim() : '',
+            visible: link.link ? link.visible : false, // Desativa se o link estiver vazio
+        }));
+
+        setSocialLinks(cleanedLinks);
+        localStorage.setItem(SOCIAL_LINKS_KEY, JSON.stringify(cleanedLinks));
+        console.log('Links de Redes Sociais Salvos com Sucesso!');
+        setView('index');
+    };
+
+    return (
+        <main className="min-h-screen p-4 sm:p-8 font-sans" style={{ backgroundColor: palette.BACKGROUND_SOFT }}>
+            <div className={`max-w-4xl mx-auto bg-${palette.WHITE} p-6 sm:p-8 rounded-xl shadow-2xl border-t-4`} style={{ borderColor: palette.SECONDARY_DEEP }}>
+                <div className="flex justify-between items-center mb-6 pb-4 border-b">
+                    <h2 className="text-3xl font-bold" style={{ color: palette.SECONDARY_DEEP }}>🔗 Configurar Redes Sociais</h2>
+                    <Button 
+                        onClick={() => setView('index')}
+                        variant="secondary"
+                        className="gap-2"
+                        palette={palette}
+                    >
+                        <ArrowLeft className="h-5 w-5" />
+                        Voltar
+                    </Button>
+                </div>
+
+                <p className="mb-6 text-gray-600">
+                    Insira o link ou o identificador para cada rede social. Use o seletor para decidir quais links aparecerão no topo do site.
+                </p>
+
+                <div className="space-y-6">
+                    {tempLinks.map(item => {
+                        const IconComponent = IconComponents[item.iconName] || Users;
+                        const isLinkEmpty = !item.link;
+
+                        return (
+                            <div key={item.key} className="p-4 border border-gray-200 rounded-lg bg-gray-50 shadow-sm">
+                                <div className="flex items-center justify-between mb-3">
+                                    <div className="flex items-center gap-3" style={{ color: palette.SECONDARY_DEEP }}>
+                                        <IconComponent className="w-5 h-5" />
+                                        <h3 className="text-lg font-bold text-gray-800" style={{ color: palette.TEXT_DARK }}>{item.name}</h3>
+                                    </div>
+                                    
+                                    {/* Toggle de Visibilidade */}
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-sm text-gray-600">Mostrar na Tela Principal:</span>
+                                        <button
+                                            onClick={() => handleChange(item.key, 'visible', !item.visible)}
+                                            className="p-1 rounded-full transition-all duration-300"
+                                            title={item.visible ? "Ocultar" : "Mostrar"}
+                                            disabled={isLinkEmpty}
+                                        >
+                                            {item.visible && !isLinkEmpty ? (
+                                                <ToggleRight className="w-8 h-8" style={{ color: palette.SUCCESS_GREEN }} />
+                                            ) : (
+                                                <ToggleLeft className="w-8 h-8" style={{ color: isLinkEmpty ? '#9CA3AF' : '#EF4444' }} />
+                                            )}
+                                        </button>
+                                    </div>
+                                </div>
+                                
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                        Link/ID:
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={item.link}
+                                        onChange={(e) => handleChange(item.key, 'link', e.target.value)}
+                                        className={`w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-[${palette.SECONDARY_DEEP}] focus:border-[${palette.SECONDARY_DEEP}]`}
+                                        placeholder={item.placeholder}
+                                    />
+                                    {isLinkEmpty && (
+                                        <p className="text-xs text-red-500 mt-1 flex items-center gap-1">
+                                            <X className="w-3 h-3" /> Este link está vazio e não aparecerá no site.
+                                        </p>
+                                    )}
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+                
+                <div className="mt-8 flex justify-end">
+                    <Button 
+                        onClick={handleSave} 
+                        variant="success" 
+                        className="gap-2 px-8 py-3 text-lg"
+                        palette={palette}
+                    >
+                        <Save className="h-5 w-5" />
+                        SALVAR LINKS SOCIAIS
+                    </Button>
+                </div>
+            </div>
+        </main>
+    );
+};
+
+// --- 6. Tela de Políticas de Privacidade (PrivacyPolicy) ---
+
+const PrivacyPolicy = ({ setView, palette }) => {
+    // Texto exato da política fornecido pelo usuário
+    const policyText = "Nosso site AchadinhoKit.com utiliza tecnologias de rastreamento (como cookies, Meta ADS) para analisar o tráfego e nossas melhorias campanhas de publicidade. Estes cookies são instalados para rastrear o evento 'Clique no Botão de Afiliado' e, posteriormente, rastrear a conversão na plataforma Shopee. Ao usar nosso site, você concorda com o uso de cookies para fins de marketing e atribuição de comissão.";
+
+    return (
+        <main className="min-h-screen p-4 sm:p-8 font-sans" style={{ backgroundColor: palette.BACKGROUND_SOFT }}>
+            <div className={`max-w-4xl mx-auto bg-${palette.WHITE} p-6 sm:p-8 rounded-xl shadow-2xl border-t-4`} style={{ borderColor: palette.PRIMARY_INTENSE }}>
+                <div className="flex justify-between items-center mb-6 pb-4 border-b">
+                    <h2 className="text-3xl font-bold text-gray-800" style={{ color: palette.PRIMARY_INTENSE }}>Política de Privacidade</h2>
+                    <Button 
+                        onClick={() => setView('index')}
+                        variant="secondary"
+                        className="gap-2"
+                        palette={palette}
+                    >
+                        <ArrowLeft className="h-5 w-5" />
+                        Voltar
+                    </Button>
+                </div>
+                
+                <div className={`p-4 rounded-lg border border-pink-200`} style={{ backgroundColor: palette.ACCENT_LIGHT }}>
+                    <p className="text-lg text-gray-700 leading-relaxed font-medium">
+                        {policyText}
+                    </p>
+                </div>
+
+                <div className="mt-8 pt-4 border-t border-gray-200 flex justify-end">
+                    <Button 
+                        onClick={() => setView('index')}
+                        variant="default"
+                        className="gap-2"
+                        palette={palette}
+                    >
+                        Entendi e Aceito
+                    </Button>
+                </div>
+            </div>
+        </main>
+    );
+};
+
+
+// --- Componente Raiz (App) ---
+
+const App = () => {
+    /** @type {[Category[], React.Dispatch<React.SetStateAction<Category[]>>]} */
+    const [categories, setCategories] = useState([]);
+    const [trackingIds, setTrackingIds] = useState(defaultTrackingIds);
+    const [palette, setPalette] = useState(DEFAULT_PALETTE); 
+    const [socialLinks, setSocialLinks] = useState(defaultSocialLinks); 
+    const [view, setView] = useState('index'); // 'index', 'admin', 'tracking', 'privacy', 'color', 'social'
+    const [isLoading, setIsLoading] = useState(true);
+
+    // 1. Carregar Dados Salvos (Links, IDs, Paleta e Social Links)
+    useEffect(() => {
+        // Carregar Links
+        const savedLinks = localStorage.getItem(LINKS_STORAGE_KEY); 
+        let loadedCategories = defaultCategories;
+        if (savedLinks) {
+            try {
+                const parsedLinks = JSON.parse(savedLinks);
+                loadedCategories = defaultCategories.map(defaultCat => {
+                    const savedItem = parsedLinks.find(p => p.title === defaultCat.title);
+                    
+                    // Lógica de Migração (mantida)
+                    if (defaultCat.title === "Kit Áudio" && !savedItem) {
+                        const oldItem = parsedLinks.find(p => p.title === "Kit Eletrônicos");
+                         if (oldItem) {
+                            return { ...defaultCat, link: oldItem.link, base64Image: oldItem.base64Image || defaultCat.base64Image };
+                         }
+                    }
+                    if (defaultCat.title === "Kit Mãe e Bebê" && !savedItem) {
+                        const oldItem = parsedLinks.find(p => p.title === "Kit Decoração");
+                         if (oldItem) {
+                            return { ...defaultCat, link: oldItem.link, base64Image: oldItem.base64Image || defaultCat.base64Image };
+                         }
+                    }
+                    if (defaultCat.title === "Kit Casa & Cozinha" && !savedItem) {
+                        const oldItem = parsedLinks.find(p => p.title === "Kit Casa");
+                         if (oldItem) {
+                            return { ...defaultCat, link: oldItem.link, base64Image: oldItem.base64Image || defaultCat.base64Image };
+                         }
+                    }
+
+                    return savedItem ? { 
+                        ...defaultCat, 
+                        link: savedItem.link, 
+                        iconName: savedItem.iconName, 
+                        base64Image: savedItem.base64Image || savedItem.imageUrl 
+                    } : defaultCat;
+                });
+
+            } catch (e) {
+                console.error("Erro ao carregar links do localStorage, usando padrões.", e);
+            }
+        }
+        setCategories(loadedCategories);
+
+        // Carregar Tracking IDs
+        const savedTracking = localStorage.getItem(TRACKING_STORAGE_KEY);
+        if (savedTracking) {
+            try {
+                setTrackingIds(JSON.parse(savedTracking));
+            } catch (e) {
+                console.error("Erro ao carregar tracking IDs do localStorage, usando padrões.", e);
+            }
+        }
+
+        // CARREGAR PALETA DE CORES
+        const savedPalette = localStorage.getItem(COLOR_PALETTE_KEY);
+        if (savedPalette) {
+            try {
+                setPalette(prev => ({ ...prev, ...JSON.parse(savedPalette) }));
+            } catch (e) {
+                console.error("Erro ao carregar paleta de cores, usando padrões.", e);
+            }
+        }
+        
+        // CARREGAR LINKS SOCIAIS (Atualizado para incluir novos links)
+        const savedSocialLinks = localStorage.getItem(SOCIAL_LINKS_KEY);
+        if (savedSocialLinks) {
+            try {
+                const parsedSocial = JSON.parse(savedSocialLinks);
+                // Mescla com o default para garantir que novas plataformas (Pinterest, X) sejam incluídas e dados antigos mantidos
+                const mergedSocial = defaultSocialLinks.map(defaultLink => {
+                    const savedLink = parsedSocial.find(s => s.key === defaultLink.key);
+                    return savedLink ? { 
+                        ...defaultLink, 
+                        link: savedLink.link, 
+                        visible: savedLink.visible,
+                    } : defaultLink;
+                });
+                setSocialLinks(mergedSocial);
+            } catch (e) {
+                console.error("Erro ao carregar links sociais, usando padrões.", e);
+            }
+        }
+        
+        setIsLoading(false);
+    }, []);
+
+    // 2. Injetar Pixels/Tags sempre que os IDs mudam
+    useEffect(() => {
+        if (!isLoading) {
+            injectTrackingScripts(trackingIds);
+        }
+    }, [trackingIds, isLoading]);
+
+
+    // Função para simular o roteamento
+    const handleSetView = useCallback((newView) => {
+        if (newView === 'admin') {
+            window.location.hash = '#/admin';
+        } else if (newView === 'tracking') {
+            window.location.hash = '#/tracking';
+        } else if (newView === 'privacy') {
+            window.location.hash = '#/privacy';
+        } else if (newView === 'color') {
+            window.location.hash = '#/color';
+        } else if (newView === 'social') { 
+            window.location.hash = '#/social';
+        } else {
+            window.location.hash = '';
+        }
+        setView(newView);
+    }, []);
+
+    // Simula a navegação baseada na hash da URL
+    useEffect(() => {
+      const handleHashChange = () => {
+        const hash = window.location.hash;
+        if (hash === '#/admin') {
+          setView('admin');
+        } else if (hash === '#/tracking') {
+          setView('tracking');
+        } else if (hash === '#/privacy') {
+          setView('privacy');
+        } else if (hash === '#/color') {
+          setView('color');
+        } else if (hash === '#/social') {
+          setView('social');
+        } else {
+          setView('index');
+        }
+      };
+
+      window.addEventListener('hashchange', handleHashChange);
+      handleHashChange(); // Executa no carregamento inicial
+
+      return () => window.removeEventListener('hashchange', handleHashChange);
+    }, []);
+
+
+    if (isLoading) {
+        return <div className="min-h-screen flex items-center justify-center bg-gray-100"><p className={`text-lg`} style={{ color: palette.PRIMARY_INTENSE }}>Carregando seus achadinhos...</p></div>;
+    }
+
+    // --- Roteamento dos Componentes ---
+    if (view === 'admin') {
+        return (
+            <Admin 
+                categories={categories} 
+                setCategories={setCategories} 
+                setView={handleSetView} 
+                palette={palette}
+            />
+        );
+    }
+    
+    if (view === 'tracking') {
+        return (
+            <TrackingConfig 
+                trackingIds={trackingIds}
+                setTrackingIds={setTrackingIds}
+                setView={handleSetView} 
+                palette={palette}
+            />
+        );
+    }
+
+    if (view === 'color') {
+        return (
+            <ColorConfig
+                palette={palette}
+                setPalette={setPalette}
+                setView={handleSetView}
+            />
+        );
+    }
+    
+    if (view === 'social') {
+        return (
+            <SocialConfig
+                socialLinks={socialLinks}
+                setSocialLinks={setSocialLinks}
+                setView={handleSetView}
+                palette={palette}
+            />
+        );
+    }
+
+    if (view === 'privacy') { 
+        return (
+            <PrivacyPolicy 
+                setView={handleSetView} 
+                palette={palette}
+            />
+        );
+    }
+
+    return (
+        <Index 
+            categories={categories} 
+            setView={handleSetView} 
+            palette={palette}
+            socialLinks={socialLinks} 
+        />
+    );
+};
+
+export default App;
